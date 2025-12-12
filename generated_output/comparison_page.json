@@ -1,0 +1,41 @@
+{
+    "product_a": {
+        "name": "GlowBoost Vitamin C Serum",
+        "concentration": "10% Vitamin C",
+        "skin_type": [
+            "Oily",
+            "Combination"
+        ],
+        "ingredients": [
+            "Vitamin C",
+            "Hyaluronic Acid"
+        ],
+        "benefits": [
+            "Brightening",
+            "Fades dark spots"
+        ],
+        "usage": "Apply 2\u20133 drops in the morning before sunscreen",
+        "side_effects": "Mild tingling for sensitive skin",
+        "price": 699
+    },
+    "product_b": {
+        "name": "VitaShine C-Elixir",
+        "concentration": "15% L-Ascorbic Acid",
+        "ingredients": [
+            "L-Ascorbic Acid",
+            "Ferulic Acid",
+            "Vitamin E"
+        ],
+        "benefits": [
+            "Brightening",
+            "Antioxidant protection",
+            "Reduces fine lines"
+        ],
+        "price": 750
+    },
+    "comparison": {
+        "stronger_formulation": "VitaShine C-Elixir",
+        "price_difference": -51,
+        "better_for_oily_skin": "GlowBoost Vitamin C Serum"
+    }
+}

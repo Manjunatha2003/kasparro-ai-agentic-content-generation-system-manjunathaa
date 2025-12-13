@@ -1,10 +1,14 @@
 import json
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
+from schemas import ContentBlocks, PriceBlock
+from utils import parse_json_with_retry, logger
+import time
 
 class BlockAgent:
-    def __init__(self, llm):
+    def __init__(self, llm, max_retries=3):
         self.llm = llm
+        self.max_retries = max_retries
         self.prompt = PromptTemplate(
             input_variables=["product"],
             template="""Create content blocks for this product.
@@ -23,18 +27,22 @@ No markdown, no explanations, only JSON."""
         self.chain = LLMChain(llm=self.llm, prompt=self.prompt)
     
     def execute(self, product):
-        product_str = json.dumps(product, indent=2)
-        result = self.chain.run(product=product_str)
+        for attempt in range(self.max_retries):
+            try:
+                logger.info(f"BlockAgent attempt {attempt + 1}")
+                product_str = json.dumps(product, indent=2)
+                result = self.chain.run(product=product_str)
+                
+                parsed = parse_json_with_retry(result)
+                
+                blocks = ContentBlocks(**parsed)
+                logger.info("Content blocks created and validated successfully")
+                return blocks.dict()
+                
+            except Exception as e:
+                logger.error(f"BlockAgent attempt {attempt + 1} failed: {e}")
+                if attempt == self.max_retries - 1:
+                    raise
+                time.sleep(2)
         
-        cleaned = result.strip()
-        if cleaned.startswith("```json"):
-            cleaned = cleaned[7:]
-        if cleaned.startswith("```"):
-            cleaned = cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-        
-        blocks = json.loads(cleaned)
-        
-        return blocks
+        raise RuntimeError("BlockAgent failed after all retries")

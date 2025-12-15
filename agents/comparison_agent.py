@@ -1,34 +1,37 @@
 import json
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
+from schemas import Product, Comparison
+from utils import parse_json_with_retry, logger
+from logic.deterministic import (
+    calculate_price_difference,
+    compare_concentrations,
+    determine_better_for_skin_type
+)
+import time
 
 class ComparisonAgent:
-    def __init__(self, llm):
+    def __init__(self, llm, max_retries=3):
         self.llm = llm
+        self.max_retries = max_retries
         self.prompt = PromptTemplate(
             input_variables=["product_a"],
-            template="""Create a fictional competing product and comparison analysis.
+            template="""Create a fictional competing product for comparison.
 
 Real Product A: {product_a}
 
-Generate:
-1. A fictional Product B with similar structure but different values
-2. Comparison metrics between A and B
+Generate only Product B with similar structure but different values.
 
 Return ONLY a JSON object with this exact structure:
 {{
-  "product_b": {{
-    "name": "...",
-    "concentration": "...",
-    "ingredients": [...],
-    "benefits": [...],
-    "price": number
-  }},
-  "comparison": {{
-    "stronger_formulation": "name of stronger product or empty string",
-    "price_difference": number (A price minus B price),
-    "better_for_oily_skin": "name of better product"
-  }}
+  "name": "...",
+  "concentration": "...",
+  "skin_type": [...],
+  "ingredients": [...],
+  "benefits": [...],
+  "usage": "...",
+  "side_effects": "...",
+  "price": number
 }}
 
 No markdown, no explanations, only JSON."""
@@ -36,18 +39,51 @@ No markdown, no explanations, only JSON."""
         self.chain = LLMChain(llm=self.llm, prompt=self.prompt)
     
     def execute(self, product_a):
-        product_str = json.dumps(product_a, indent=2)
-        result = self.chain.run(product_a=product_str)
+        for attempt in range(self.max_retries):
+            try:
+                logger.info(f"ComparisonAgent attempt {attempt + 1}")
+                product_str = json.dumps(product_a, indent=2)
+                result = self.chain.run(product_a=product_str)
+                
+                parsed = parse_json_with_retry(result)
+                
+                if isinstance(parsed.get("price"), str):
+                    try:
+                        parsed["price"] = int(parsed["price"])
+                    except ValueError:
+                        raise ValueError(f"Invalid price format in product B")
+                
+                product_b = Product(**parsed)
+                
+                price_diff = calculate_price_difference(product_a["price"], product_b.price)
+                
+                concentration_result = compare_concentrations(
+                    product_a.get("concentration", "0%"),
+                    product_b.concentration
+                )
+                
+                if concentration_result == "a":
+                    stronger = product_a["name"]
+                elif concentration_result == "b":
+                    stronger = product_b.name
+                else:
+                    stronger = ""
+                
+                better_oily = determine_better_for_skin_type(product_a, product_b.dict(), "Oily")
+                
+                comparison = Comparison(
+                    stronger_formulation=stronger,
+                    price_difference=price_diff,
+                    better_for_oily_skin=better_oily
+                )
+                
+                logger.info("Comparison generated and validated successfully")
+                return product_b.dict(), comparison.dict()
+                
+            except Exception as e:
+                logger.error(f"ComparisonAgent attempt {attempt + 1} failed: {e}")
+                if attempt == self.max_retries - 1:
+                    raise
+                time.sleep(2)
         
-        cleaned = result.strip()
-        if cleaned.startswith("```json"):
-            cleaned = cleaned[7:]
-        if cleaned.startswith("```"):
-            cleaned = cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
-        
-        data = json.loads(cleaned)
-        
-        return data["product_b"], data["comparison"]
+        raise RuntimeError("ComparisonAgent failed after all retries")

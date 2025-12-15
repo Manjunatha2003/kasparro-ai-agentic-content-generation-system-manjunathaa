@@ -1,0 +1,63 @@
+import pytest
+from unittest.mock import Mock, patch
+from agents.product_parser_agent import ProductParserAgent
+from agents.question_agent import QuestionAgent
+from agents.assembly_agent import AssemblyAgent
+
+@patch('agents.product_parser_agent.LLMChain')
+def test_product_parser_agent_success(mock_chain):
+    mock_llm = Mock()
+    mock_chain_instance = Mock()
+    mock_chain.return_value = mock_chain_instance
+    mock_chain_instance.run.return_value = '''
+    {
+        "name": "Test Product",
+        "concentration": "10%",
+        "skin_type": ["Oily"],
+        "ingredients": ["Vitamin C"],
+        "benefits": ["Brightening"],
+        "usage": "Apply daily",
+        "side_effects": "None",
+        "price": 500
+    }
+    '''
+    
+    agent = ProductParserAgent(mock_llm)
+    result = agent.execute({"name": "Raw Product", "price": "500"})
+    
+    assert result["name"] == "Test Product"
+    assert result["price"] == 500
+
+@patch('agents.question_agent.LLMChain')
+def test_question_agent_success(mock_chain):
+    mock_llm = Mock()
+    mock_chain_instance = Mock()
+    mock_chain.return_value = mock_chain_instance
+    
+    questions = [
+        {"question": f"Question {i}", "answer": f"Answer {i}", "category": "informational"}
+        for i in range(15)
+    ]
+    mock_chain_instance.run.return_value = json.dumps(questions)
+    
+    agent = QuestionAgent(mock_llm)
+    product = {
+        "name": "Test",
+        "concentration": "10%",
+        "skin_type": ["Oily"],
+        "ingredients": ["Vitamin C"],
+        "benefits": ["Brightening"],
+        "usage": "Apply",
+        "side_effects": "None",
+        "price": 500
+    }
+    result = agent.execute(product)
+    
+    assert len(result) == 15
+    assert result[0]["question"] == "Question 0"
+
+def test_assembly_agent():
+    agent = AssemblyAgent()
+    assert agent is not None
+
+import json
